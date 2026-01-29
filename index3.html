@@ -501,14 +501,14 @@
     
     <script>
         // ====================
-        // 1. DATA MODEL & STATE
+        // 1. DATA MODEL & STATE - EMPTY VERSION
         // ====================
         const defaultData = {
-            timeSlots: ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM"],
-            classes: ["10A-East", "10B-West", "9A", "9B", "8A"],
-            classGrades: ["10", "10", "9", "9", "8"], // Grade levels for each class
-            teachers: ["Ms. Smith", "Mr. Johnson", "Ms. Lee", "Mr. Brown", "Ms. Davis", "Coach Taylor"],
-            subjects: ["Mathematics", "Science", "English", "History", "Art", "Physical Education", "Music"],
+            timeSlots: [],
+            classes: [],
+            classGrades: [], // Grade levels for each class
+            teachers: [],
+            subjects: [],
             // Updated structure: gridData[timeIndex][classIndex] = { subject: "", teacher: "" }
             gridData: []
         };
@@ -554,14 +554,13 @@
             renderManagementLists();
             renderScheduleGrid();
             populateFilterDropdowns();
-            populateTeacherReportDropdown();
             updateQuickStats();
             renderGradeSummary();
             setupDragAndDrop();
         });
 
         // ====================
-        // 3. EXCEL IMPORT/EXPORT FUNCTIONS - UPDATED
+        // 3. EXCEL IMPORT/EXPORT FUNCTIONS
         // ====================
         function setupDragAndDrop() {
             const uploadArea = document.getElementById('uploadArea');
@@ -880,7 +879,6 @@
             renderManagementLists();
             renderScheduleGrid();
             populateFilterDropdowns();
-            populateTeacherReportDropdown();
             updateQuickStats();
             renderGradeSummary();
             
@@ -899,14 +897,14 @@
             const masterListData = [
                 ["MASTER LIST TEMPLATE - Use this to import teachers, subjects, and classes"],
                 ["TEACHER", "SUBJECT", "CLASS", "GRADE", "SECTION"],
-                ["Mr. James Wilson", "Mathematics", "10A", "10", "A"],
-                ["Ms. Sarah Chen", "Science", "10B", "10", "B"],
-                ["Dr. Robert Kim", "English Literature", "9A", "9", "A"],
-                ["Coach Maria Garcia", "Physical Education", "9B", "9", "B"],
-                ["Mrs. Emily White", "History", "8A", "8", "A"],
-                ["Mr. David Lee", "Computer Science", "8B", "8", "B"],
-                ["Ms. Olivia Brown", "Art", "7A", "7", "A"],
-                ["Mr. Michael Taylor", "Music", "7B", "7", "B"],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
                 ["", "", "", "", ""],
                 ["INSTRUCTIONS:", "", "", "", ""],
                 ["1. Fill in the columns with your data", "", "", "", ""],
@@ -922,14 +920,14 @@
             const scheduleData = [
                 ["SCHEDULE TEMPLATE - Use this to import complete schedules with assignments"],
                 ["TIME", "CLASS", "GRADE", "SUBJECT", "TEACHER"],
-                ["8:00 AM", "10A", "10", "Mathematics", "Mr. James Wilson"],
-                ["8:00 AM", "10B", "10", "Science", "Ms. Sarah Chen"],
-                ["9:00 AM", "9A", "9", "English Literature", "Dr. Robert Kim"],
-                ["9:00 AM", "9B", "9", "Physical Education", "Coach Maria Garcia"],
-                ["10:00 AM", "8A", "8", "History", "Mrs. Emily White"],
-                ["10:00 AM", "8B", "8", "Computer Science", "Mr. David Lee"],
-                ["11:00 AM", "7A", "7", "Art", "Ms. Olivia Brown"],
-                ["11:00 AM", "7B", "7", "Music", "Mr. Michael Taylor"],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
+                ["", "", "", "", ""],
                 ["", "", "", "", ""],
                 ["INSTRUCTIONS:", "", "", "", ""],
                 ["1. Fill in all columns", "", "", "", ""],
@@ -984,6 +982,11 @@
         }
 
         function exportToExcel() {
+            if (appState.classes.length === 0) {
+                showStatus('No data to export. Please add classes, teachers, and subjects first.', 'error');
+                return;
+            }
+            
             // Create data array for export
             const exportData = [];
             
@@ -1001,12 +1004,14 @@
             
             // Add grade distribution
             const gradeDistribution = getGradeDistribution();
-            exportData.push([]);
-            exportData.push(["GRADE LEVEL DISTRIBUTION", "", "", "", ""]);
-            exportData.push(["Grade Level", "Number of Classes", "", "", ""]);
-            Object.entries(gradeDistribution).forEach(([grade, count]) => {
-                exportData.push([grade, count, "", "", ""]);
-            });
+            if (Object.keys(gradeDistribution).length > 0) {
+                exportData.push([]);
+                exportData.push(["GRADE LEVEL DISTRIBUTION", "", "", "", ""]);
+                exportData.push(["Grade Level", "Number of Classes", "", "", ""]);
+                Object.entries(gradeDistribution).forEach(([grade, count]) => {
+                    exportData.push([grade, count, "", "", ""]);
+                });
+            }
             
             exportData.push([]);
             
@@ -1014,11 +1019,13 @@
             exportData.push(["MASTER SCHEDULE", "", "", "", ""]);
             exportData.push(["Time", "Class", "Grade", "Subject", "Teacher"]);
             
+            let hasScheduleData = false;
             appState.gridData.forEach((row, timeIndex) => {
                 row.forEach((cell, classIndex) => {
                     if (cell.subject || cell.teacher) {
+                        hasScheduleData = true;
                         exportData.push([
-                            appState.timeSlots[timeIndex],
+                            appState.timeSlots[timeIndex] || `Time ${timeIndex + 1}`,
                             appState.classes[classIndex],
                             appState.classGrades[classIndex] || "N/A",
                             cell.subject || "(No subject)",
@@ -1028,36 +1035,42 @@
                 });
             });
             
+            if (!hasScheduleData) {
+                exportData.push(["No schedule assignments yet", "", "", "", ""]);
+            }
+            
             exportData.push([]);
             
-            // Add teacher workload reports
-            exportData.push(["TEACHER WORKLOAD REPORTS", "", "", "", ""]);
-            
-            appState.teachers.forEach(teacher => {
-                exportData.push([`Teacher: ${teacher}`, "", "", "", ""]);
-                exportData.push(["Time", "Subject", "Class", "Grade", "Period"]);
+            // Add teacher workload reports if there are teachers
+            if (appState.teachers.length > 0) {
+                exportData.push(["TEACHER WORKLOAD REPORTS", "", "", "", ""]);
                 
-                let hasEntries = false;
-                appState.gridData.forEach((row, timeIndex) => {
-                    row.forEach((cell, classIndex) => {
-                        if (cell.teacher === teacher && cell.subject) {
-                            hasEntries = true;
-                            exportData.push([
-                                appState.timeSlots[timeIndex],
-                                cell.subject,
-                                appState.classes[classIndex],
-                                appState.classGrades[classIndex] || "N/A",
-                                `Period ${timeIndex + 1}`
-                            ]);
-                        }
+                appState.teachers.forEach(teacher => {
+                    exportData.push([`Teacher: ${teacher}`, "", "", "", ""]);
+                    exportData.push(["Time", "Subject", "Class", "Grade", "Period"]);
+                    
+                    let hasEntries = false;
+                    appState.gridData.forEach((row, timeIndex) => {
+                        row.forEach((cell, classIndex) => {
+                            if (cell.teacher === teacher && cell.subject) {
+                                hasEntries = true;
+                                exportData.push([
+                                    appState.timeSlots[timeIndex] || `Time ${timeIndex + 1}`,
+                                    cell.subject,
+                                    appState.classes[classIndex],
+                                    appState.classGrades[classIndex] || "N/A",
+                                    `Period ${timeIndex + 1}`
+                                ]);
+                            }
+                        });
                     });
+                    
+                    if (!hasEntries) {
+                        exportData.push(["No classes assigned", "", "", "", ""]);
+                    }
+                    exportData.push([]);
                 });
-                
-                if (!hasEntries) {
-                    exportData.push(["No classes assigned", "", "", "", ""]);
-                }
-                exportData.push([]);
-            });
+            }
             
             // Create workbook
             const wb = XLSX.utils.book_new();
@@ -1323,6 +1336,11 @@
             const gradeSummary = document.getElementById('gradeSummary');
             const distribution = getGradeDistribution();
             
+            if (Object.keys(distribution).length === 0) {
+                gradeSummary.innerHTML = '<div style="text-align: center; color: #7f8c8d; padding: 10px;">No classes added yet</div>';
+                return;
+            }
+            
             let summaryHTML = '<div style="margin-bottom: 10px;">';
             Object.entries(distribution).forEach(([grade, count]) => {
                 summaryHTML += `
@@ -1350,13 +1368,30 @@
         }
 
         // ====================
-        // 6. SCHEDULE GRID FUNCTIONS (Updated for separate Subject/Teacher columns)
+        // 6. SCHEDULE GRID FUNCTIONS
         // ====================
         function renderScheduleGrid() {
             const thead = document.querySelector('#scheduleGrid thead');
             const tbody = document.querySelector('#scheduleGrid tbody');
             thead.innerHTML = '';
             tbody.innerHTML = '';
+
+            // Check if we have any data
+            if (appState.classes.length === 0 || appState.timeSlots.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="${1 + (appState.classes.length * 3)}" style="text-align: center; padding: 40px; color: #7f8c8d;">
+                            <i class="fas fa-calendar-plus" style="font-size: 2em; margin-bottom: 10px; display: block;"></i>
+                            <h3>No schedule data yet</h3>
+                            <p>Add classes, time slots, teachers, and subjects to get started</p>
+                            <button class="btn info" onclick="generateEmptySchedule()" style="margin-top: 15px;">
+                                <i class="fas fa-plus-circle"></i> Generate Empty Schedule
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
 
             // Create header row with three columns per class: Grade, Subject, Teacher
             let headerRow = '<tr><th class="time-header">Time</th>';
@@ -1497,14 +1532,20 @@
             document.getElementById('filterTime').onchange = applyFilters;
             
             // Report teacher select
-            populateSelect('reportTeacherSelect', appState.teachers, '-- Choose a Teacher --');
-            document.getElementById('reportTeacherSelect').onchange = function() {
+            const reportTeacherSelect = document.getElementById('reportTeacherSelect');
+            reportTeacherSelect.innerHTML = '<option value="">-- Choose a Teacher --</option>';
+            appState.teachers.forEach(teacher => {
+                reportTeacherSelect.innerHTML += `<option value="${teacher}">${teacher}</option>`;
+            });
+            reportTeacherSelect.onchange = function() {
                 generateTeacherWorkloadReport(this.value);
             };
         }
 
         function populateSelect(selectId, items, defaultText) {
             const select = document.getElementById(selectId);
+            if (!select) return;
+            
             select.innerHTML = `<option value="">${defaultText}</option>`;
             items.forEach(item => {
                 select.innerHTML += `<option value="${item}">${item}</option>`;
@@ -1714,6 +1755,17 @@
         // 9. UTILITY FUNCTIONS
         // ====================
         function generateEmptySchedule() {
+            // Check if we have the basic data needed
+            if (appState.classes.length === 0) {
+                showStatus('Please add at least one class first.', 'error');
+                return;
+            }
+            
+            if (appState.timeSlots.length === 0) {
+                showStatus('Please add at least one time slot first.', 'error');
+                return;
+            }
+            
             if (!confirm('Generate a fresh empty schedule? This will clear all current assignments.')) return;
             
             initializeGrid();
@@ -1739,8 +1791,6 @@
 
         function updateQuickStats() {
             const uniqueGrades = [...new Set(appState.classGrades)];
-            const gradeDistribution = getGradeDistribution();
-            const totalClassesByGrade = Object.values(gradeDistribution).reduce((sum, count) => sum + count, 0);
             
             const statsHtml = `
                 <div class="stat-card">
@@ -1806,7 +1856,6 @@
             renderManagementLists();
             renderScheduleGrid();
             populateFilterDropdowns();
-            populateTeacherReportDropdown();
             updateQuickStats();
             renderGradeSummary();
             showStatus('Data loaded from browser storage.', 'success');
