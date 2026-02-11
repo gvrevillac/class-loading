@@ -2017,12 +2017,15 @@ async function loadFromGoogleSheets() {
         // Get all schedules for this user
         const response = await fetch(`${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`);
         const result = await response.json();
-        
+
+        // Debug: Show actual response in status message
+        showStatus('Google Sheets response:<br><pre>' + JSON.stringify(result, null, 2) + '</pre>', 'info');
+
         if (!result.success || !result.schedules || result.schedules.length === 0) {
             showStatus('No saved schedules found for your account.', 'error');
             return;
         }
-        
+
         // Display list of schedules
         let scheduleList = 'Select a schedule to load:\n\n';
         result.schedules.forEach((schedule, index) => {
@@ -2031,24 +2034,24 @@ async function loadFromGoogleSheets() {
             const classCount = schedule.schedule_data?.classes?.length || 0;
             scheduleList += `${index + 1}. ${schedule.schedule_name}\n   📅 ${date} ${time} | 📚 ${classCount} classes\n\n`;
         });
-        
+
         const choice = prompt(scheduleList + 'Enter the number of the schedule to load:');
         const index = parseInt(choice) - 1;
-        
+
         if (isNaN(index) || index < 0 || index >= result.schedules.length) {
             showStatus('Invalid selection.', 'error');
             return;
         }
-        
+
         const selectedSchedule = result.schedules[index];
-        
+
         if (!confirm(`Load "${selectedSchedule.schedule_name}"?\nThis will replace your current schedule.`)) {
             return;
         }
-        
+
         // Load the schedule
         appState = selectedSchedule.schedule_data;
-        
+
         // Ensure classGrades exists
         if (!appState.classGrades || appState.classGrades.length !== appState.classes.length) {
             appState.classGrades = [];
@@ -2057,11 +2060,11 @@ async function loadFromGoogleSheets() {
                 appState.classGrades.push(grade);
             });
         }
-        
+
         // Save schedule ID for future updates
         localStorage.setItem('current_schedule_id', selectedSchedule.schedule_id);
         localStorage.setItem('last_saved_schedule_name', selectedSchedule.schedule_name);
-        
+
         // Update UI
         renderManagementLists();
         renderScheduleGrid();
@@ -2069,9 +2072,9 @@ async function loadFromGoogleSheets() {
         updateQuickStats();
         renderGradeSummary();
         saveToLocalStorage(); // Also save locally
-        
+
         showStatus(`✅ Loaded "${selectedSchedule.schedule_name}" from Google Sheets!`, 'success');
-        
+
     } catch (error) {
         console.error('Error loading from Google Sheets:', error);
         showStatus(`❌ Error loading from Google Sheets: ${error.message}`, 'error');
