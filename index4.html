@@ -1910,6 +1910,7 @@
 // ====================
 // REPLACE THIS WITH YOUR DEPLOYED WEB APP URL
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyrTV2FlSmmHTAKeQxTOw7uaeHDJ-zDECndS7HFTaCbtZ5RDHLAUWGreileH9hg0oFy/exec';
+const GOOGLE_SHEETS_TIMEOUT_MS = 30000; // 30 second timeout for requests
 
 // Add these buttons to your action-buttons div:
 /*
@@ -1996,7 +1997,7 @@ async function saveToGoogleSheets() {
         
         // Make the request with timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), GOOGLE_SHEETS_TIMEOUT_MS);
         
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
@@ -2053,7 +2054,7 @@ async function saveToGoogleSheets() {
             errorMessage += error.message;
         }
         
-        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        errorMessage += '\n\nCheck the browser console for more details.';
         
         showStatus(`❌ Error: ${error.message}`, 'error');
         alert(errorMessage);
@@ -2079,7 +2080,7 @@ async function loadFromGoogleSheets() {
         
         // Make the request with timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), GOOGLE_SHEETS_TIMEOUT_MS);
         
         const response = await fetch(url, {
             method: 'GET',
@@ -2202,7 +2203,7 @@ async function loadFromGoogleSheets() {
             errorMessage += error.message;
         }
         
-        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        errorMessage += '\n\nCheck the browser console for more details.';
         
         showStatus(`❌ Error: ${error.message}`, 'error');
         alert(errorMessage);
@@ -2228,7 +2229,7 @@ async function listGoogleSheetSchedules() {
         
         // Make the request with timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), GOOGLE_SHEETS_TIMEOUT_MS);
         
         const response = await fetch(url, {
             method: 'GET',
@@ -2307,7 +2308,7 @@ async function listGoogleSheetSchedules() {
             errorMessage += error.message;
         }
         
-        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        errorMessage += '\n\nCheck the browser console for more details.';
         
         showStatus(`❌ Error: ${error.message}`, 'error');
         alert(errorMessage);
@@ -2329,7 +2330,7 @@ async function deleteFromGoogleSheets() {
         
         // Get schedules first with timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), GOOGLE_SHEETS_TIMEOUT_MS);
         
         const url = `${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`;
         const response = await fetch(url, {
@@ -2403,7 +2404,7 @@ async function deleteFromGoogleSheets() {
         
         // Delete the schedule with timeout
         const deleteController = new AbortController();
-        const deleteTimeoutId = setTimeout(() => deleteController.abort(), 30000);
+        const deleteTimeoutId = setTimeout(() => deleteController.abort(), GOOGLE_SHEETS_TIMEOUT_MS);
         
         const deleteUrl = `${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}&schedule_id=${encodeURIComponent(selectedSchedule.schedule_id)}`;
         console.log('🗑️ Deleting from:', deleteUrl);
@@ -2467,7 +2468,7 @@ async function deleteFromGoogleSheets() {
             errorMessage += error.message;
         }
         
-        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        errorMessage += '\n\nCheck the browser console for more details.';
         
         showStatus(`❌ Error: ${error.message}`, 'error');
         alert(errorMessage);
