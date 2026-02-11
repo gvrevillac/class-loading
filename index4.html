@@ -1967,6 +1967,11 @@ async function saveToGoogleSheets() {
         
         if (!scheduleName) return;
         
+        // Verify URL is set
+        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes('YOUR_WEB_APP_URL')) {
+            throw new Error('Google Sheets URL not configured. Please set GOOGLE_SCRIPT_URL in the code.');
+        }
+        
         // Check if we're updating an existing schedule
         const existingId = localStorage.getItem('current_schedule_id');
         let scheduleId = existingId;
@@ -1983,27 +1988,75 @@ async function saveToGoogleSheets() {
             schedule_id: scheduleId
         };
         
+        console.log('💾 Saving schedule:', scheduleName);
+        console.log('🔑 Schedule ID:', scheduleId);
+        console.log('👤 Username:', username);
+        
         showStatus('Saving to Google Sheets...', 'info');
+        
+        // Make the request with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
         
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
         
-        const result = await response.json();
+        clearTimeout(timeoutId);
+        
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response OK:', response.ok);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Get response text first for debugging
+        const responseText = await response.text();
+        console.log('📄 Raw response:', responseText);
+        
+        // Try to parse JSON
+        let result;
+        try {
+            result = JSON.parse(responseText);
+            console.log('✅ Parsed result:', result);
+        } catch (parseError) {
+            console.error('❌ JSON parse error:', parseError);
+            throw new Error(`Invalid JSON response: ${parseError.message}`);
+        }
         
         if (result.success) {
             showStatus(`✅ Schedule "${scheduleName}" saved to Google Sheets!`, 'success');
+            console.log('✅ Schedule saved successfully!');
             // Also save schedule ID for future updates
             localStorage.setItem('last_saved_schedule_id', scheduleId);
             localStorage.setItem('last_saved_schedule_name', scheduleName);
         } else {
-            throw new Error(result.message || 'Failed to save');
+            throw new Error(result.message || result.error || 'Failed to save');
         }
         
     } catch (error) {
-        console.error('Error saving to Google Sheets:', error);
-        showStatus(`❌ Error saving to Google Sheets: ${error.message}`, 'error');
+        console.error('❌ Error saving to Google Sheets:', error);
+        console.error('❌ Error stack:', error.stack);
+        
+        let errorMessage = 'Failed to save to Google Sheets.\n\n';
+        
+        if (error.name === 'AbortError') {
+            errorMessage += 'Request timed out. Please check your internet connection.';
+        } else if (error.message.includes('HTTP error')) {
+            errorMessage += `Server error: ${error.message}\n\nThe Google Apps Script might not be properly deployed.`;
+        } else if (error.message.includes('JSON')) {
+            errorMessage += `Invalid response format: ${error.message}\n\nThe Google Apps Script might have an error.`;
+        } else {
+            errorMessage += error.message;
+        }
+        
+        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        
+        showStatus(`❌ Error: ${error.message}`, 'error');
+        alert(errorMessage);
     }
 }
 
@@ -2014,14 +2067,59 @@ async function loadFromGoogleSheets() {
         
         showStatus('Loading schedules from Google Sheets...', 'info');
         
-        // Get all schedules for this user
-        const response = await fetch(`${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`);
-        const result = await response.json();
+        // Verify URL is set
+        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes('YOUR_WEB_APP_URL')) {
+            throw new Error('Google Sheets URL not configured. Please set GOOGLE_SCRIPT_URL in the code.');
+        }
         
-        if (!result.success || !result.schedules || result.schedules.length === 0) {
+        // Build the request URL
+        const url = `${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`;
+        console.log('🔍 Fetching from:', url);
+        console.log('👤 Username:', username);
+        
+        // Make the request with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response OK:', response.ok);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Get response text first for debugging
+        const responseText = await response.text();
+        console.log('📄 Raw response:', responseText);
+        
+        // Try to parse JSON
+        let result;
+        try {
+            result = JSON.parse(responseText);
+            console.log('✅ Parsed result:', result);
+        } catch (parseError) {
+            console.error('❌ JSON parse error:', parseError);
+            throw new Error(`Invalid JSON response: ${parseError.message}`);
+        }
+        
+        if (!result.success) {
+            throw new Error(result.message || result.error || 'Unknown error from server');
+        }
+        
+        if (!result.schedules || result.schedules.length === 0) {
             showStatus('No saved schedules found for your account.', 'error');
+            alert('No saved schedules found.\n\nMake sure you have saved at least one schedule using "Save to Google Sheets".');
             return;
         }
+        
+        console.log(`📋 Found ${result.schedules.length} schedule(s)`);
         
         // Display list of schedules
         let scheduleList = 'Select a schedule to load:\n\n';
@@ -2033,6 +2131,12 @@ async function loadFromGoogleSheets() {
         });
         
         const choice = prompt(scheduleList + 'Enter the number of the schedule to load:');
+        
+        if (!choice) {
+            showStatus('Load cancelled.', 'info');
+            return;
+        }
+        
         const index = parseInt(choice) - 1;
         
         if (isNaN(index) || index < 0 || index >= result.schedules.length) {
@@ -2041,13 +2145,20 @@ async function loadFromGoogleSheets() {
         }
         
         const selectedSchedule = result.schedules[index];
+        console.log('📦 Selected schedule:', selectedSchedule.schedule_name);
         
         if (!confirm(`Load "${selectedSchedule.schedule_name}"?\nThis will replace your current schedule.`)) {
             return;
         }
         
+        // Validate schedule data
+        if (!selectedSchedule.schedule_data) {
+            throw new Error('Schedule data is missing or corrupted');
+        }
+        
         // Load the schedule
         appState = selectedSchedule.schedule_data;
+        console.log('💾 Loaded appState:', appState);
         
         // Ensure classGrades exists
         if (!appState.classGrades || appState.classGrades.length !== appState.classes.length) {
@@ -2071,10 +2182,30 @@ async function loadFromGoogleSheets() {
         saveToLocalStorage(); // Also save locally
         
         showStatus(`✅ Loaded "${selectedSchedule.schedule_name}" from Google Sheets!`, 'success');
+        console.log('✅ Schedule loaded successfully!');
         
     } catch (error) {
-        console.error('Error loading from Google Sheets:', error);
-        showStatus(`❌ Error loading from Google Sheets: ${error.message}`, 'error');
+        console.error('❌ Error loading from Google Sheets:', error);
+        console.error('❌ Error stack:', error.stack);
+        
+        let errorMessage = 'Failed to load from Google Sheets.\n\n';
+        
+        if (error.name === 'AbortError') {
+            errorMessage += 'Request timed out. Please check your internet connection.';
+        } else if (error.message.includes('HTTP error')) {
+            errorMessage += `Server error: ${error.message}\n\nThe Google Apps Script might not be properly deployed.`;
+        } else if (error.message.includes('JSON')) {
+            errorMessage += `Invalid response format: ${error.message}\n\nThe Google Apps Script might have an error.`;
+        } else if (error.message.includes('CORS')) {
+            errorMessage += 'Cross-origin request blocked.\n\nMake sure the Google Apps Script is deployed as a web app with "Anyone" access.';
+        } else {
+            errorMessage += error.message;
+        }
+        
+        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        
+        showStatus(`❌ Error: ${error.message}`, 'error');
+        alert(errorMessage);
     }
 }
 
@@ -2085,13 +2216,59 @@ async function listGoogleSheetSchedules() {
         
         showStatus('Fetching your saved schedules...', 'info');
         
-        const response = await fetch(`${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`);
-        const result = await response.json();
+        // Verify URL is set
+        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes('YOUR_WEB_APP_URL')) {
+            throw new Error('Google Sheets URL not configured. Please set GOOGLE_SCRIPT_URL in the code.');
+        }
         
-        if (!result.success || !result.schedules || result.schedules.length === 0) {
+        // Build the request URL
+        const url = `${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`;
+        console.log('🔍 Fetching schedules from:', url);
+        console.log('👤 Username:', username);
+        
+        // Make the request with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response OK:', response.ok);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Get response text first for debugging
+        const responseText = await response.text();
+        console.log('📄 Raw response:', responseText);
+        
+        // Try to parse JSON
+        let result;
+        try {
+            result = JSON.parse(responseText);
+            console.log('✅ Parsed result:', result);
+        } catch (parseError) {
+            console.error('❌ JSON parse error:', parseError);
+            throw new Error(`Invalid JSON response: ${parseError.message}`);
+        }
+        
+        if (!result.success) {
+            throw new Error(result.message || result.error || 'Unknown error from server');
+        }
+        
+        if (!result.schedules || result.schedules.length === 0) {
             showStatus('No saved schedules found for your account.', 'info');
+            alert('No saved schedules found.\n\nMake sure you have saved at least one schedule using "Save to Google Sheets".');
             return;
         }
+        
+        console.log(`📋 Found ${result.schedules.length} schedule(s)`);
         
         let scheduleList = '📋 Your Saved Schedules:\n\n';
         result.schedules.forEach((schedule, index) => {
@@ -2111,10 +2288,29 @@ async function listGoogleSheetSchedules() {
         scheduleList += '\nUse "Load from Google Sheets" to load a specific schedule.';
         
         alert(scheduleList);
+        showStatus('✅ Schedules listed successfully!', 'success');
+        console.log('✅ Schedules listed successfully!');
         
     } catch (error) {
-        console.error('Error listing schedules:', error);
-        showStatus(`❌ Error listing schedules: ${error.message}`, 'error');
+        console.error('❌ Error listing schedules:', error);
+        console.error('❌ Error stack:', error.stack);
+        
+        let errorMessage = 'Failed to list schedules from Google Sheets.\n\n';
+        
+        if (error.name === 'AbortError') {
+            errorMessage += 'Request timed out. Please check your internet connection.';
+        } else if (error.message.includes('HTTP error')) {
+            errorMessage += `Server error: ${error.message}\n\nThe Google Apps Script might not be properly deployed.`;
+        } else if (error.message.includes('JSON')) {
+            errorMessage += `Invalid response format: ${error.message}\n\nThe Google Apps Script might have an error.`;
+        } else {
+            errorMessage += error.message;
+        }
+        
+        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        
+        showStatus(`❌ Error: ${error.message}`, 'error');
+        alert(errorMessage);
     }
 }
 
@@ -2123,14 +2319,58 @@ async function deleteFromGoogleSheets() {
     try {
         const username = await getCurrentUsername();
         
-        // Get schedules first
-        const response = await fetch(`${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`);
-        const result = await response.json();
+        // Verify URL is set
+        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes('YOUR_WEB_APP_URL')) {
+            throw new Error('Google Sheets URL not configured. Please set GOOGLE_SCRIPT_URL in the code.');
+        }
         
-        if (!result.success || !result.schedules || result.schedules.length === 0) {
+        console.log('🗑️ Fetching schedules to delete...');
+        console.log('👤 Username:', username);
+        
+        // Get schedules first with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const url = `${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}`;
+        const response = await fetch(url, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response OK:', response.ok);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Get response text first for debugging
+        const responseText = await response.text();
+        console.log('📄 Raw response:', responseText);
+        
+        // Try to parse JSON
+        let result;
+        try {
+            result = JSON.parse(responseText);
+            console.log('✅ Parsed result:', result);
+        } catch (parseError) {
+            console.error('❌ JSON parse error:', parseError);
+            throw new Error(`Invalid JSON response: ${parseError.message}`);
+        }
+        
+        if (!result.success) {
+            throw new Error(result.message || result.error || 'Unknown error from server');
+        }
+        
+        if (!result.schedules || result.schedules.length === 0) {
             showStatus('No schedules to delete.', 'info');
+            alert('No saved schedules found.\n\nThere are no schedules to delete.');
             return;
         }
+        
+        console.log(`📋 Found ${result.schedules.length} schedule(s)`);
         
         // Display list for deletion
         let deleteList = 'Select a schedule to DELETE:\n\n';
@@ -2140,6 +2380,12 @@ async function deleteFromGoogleSheets() {
         });
         
         const choice = prompt(deleteList + '\nEnter the number of the schedule to DELETE:');
+        
+        if (!choice) {
+            showStatus('Delete cancelled.', 'info');
+            return;
+        }
+        
         const index = parseInt(choice) - 1;
         
         if (isNaN(index) || index < 0 || index >= result.schedules.length) {
@@ -2148,35 +2394,83 @@ async function deleteFromGoogleSheets() {
         }
         
         const selectedSchedule = result.schedules[index];
+        console.log('🗑️ Selected schedule to delete:', selectedSchedule.schedule_name);
         
         if (!confirm(`❌ PERMANENTLY DELETE "${selectedSchedule.schedule_name}"?\nThis action cannot be undone!`)) {
+            showStatus('Delete cancelled.', 'info');
             return;
         }
         
-        // Delete the schedule
+        // Delete the schedule with timeout
+        const deleteController = new AbortController();
+        const deleteTimeoutId = setTimeout(() => deleteController.abort(), 30000);
+        
         const deleteUrl = `${GOOGLE_SCRIPT_URL}?username=${encodeURIComponent(username)}&schedule_id=${encodeURIComponent(selectedSchedule.schedule_id)}`;
+        console.log('🗑️ Deleting from:', deleteUrl);
+        
         const deleteResponse = await fetch(deleteUrl, {
-            method: 'DELETE'
+            method: 'DELETE',
+            signal: deleteController.signal
         });
         
-        const deleteResult = await deleteResponse.json();
+        clearTimeout(deleteTimeoutId);
+        
+        console.log('📡 Delete response status:', deleteResponse.status);
+        console.log('📡 Delete response OK:', deleteResponse.ok);
+        
+        if (!deleteResponse.ok) {
+            throw new Error(`HTTP error! status: ${deleteResponse.status}`);
+        }
+        
+        // Get response text first for debugging
+        const deleteResponseText = await deleteResponse.text();
+        console.log('📄 Delete raw response:', deleteResponseText);
+        
+        // Try to parse JSON
+        let deleteResult;
+        try {
+            deleteResult = JSON.parse(deleteResponseText);
+            console.log('✅ Delete parsed result:', deleteResult);
+        } catch (parseError) {
+            console.error('❌ JSON parse error:', parseError);
+            throw new Error(`Invalid JSON response: ${parseError.message}`);
+        }
         
         if (deleteResult.success) {
             showStatus(`✅ Schedule "${selectedSchedule.schedule_name}" deleted successfully.`, 'success');
+            console.log('✅ Schedule deleted successfully!');
             
             // Clear current schedule ID if it was deleted
             const currentId = localStorage.getItem('current_schedule_id');
             if (currentId === selectedSchedule.schedule_id) {
                 localStorage.removeItem('current_schedule_id');
                 localStorage.removeItem('last_saved_schedule_name');
+                console.log('🧹 Cleared current schedule ID from localStorage');
             }
         } else {
-            throw new Error(deleteResult.message || 'Failed to delete');
+            throw new Error(deleteResult.message || deleteResult.error || 'Failed to delete');
         }
         
     } catch (error) {
-        console.error('Error deleting schedule:', error);
-        showStatus(`❌ Error deleting schedule: ${error.message}`, 'error');
+        console.error('❌ Error deleting schedule:', error);
+        console.error('❌ Error stack:', error.stack);
+        
+        let errorMessage = 'Failed to delete schedule from Google Sheets.\n\n';
+        
+        if (error.name === 'AbortError') {
+            errorMessage += 'Request timed out. Please check your internet connection.';
+        } else if (error.message.includes('HTTP error')) {
+            errorMessage += `Server error: ${error.message}\n\nThe Google Apps Script might not be properly deployed.`;
+        } else if (error.message.includes('JSON')) {
+            errorMessage += `Invalid response format: ${error.message}\n\nThe Google Apps Script might have an error.`;
+        } else {
+            errorMessage += error.message;
+        }
+        
+        errorMessage += '\n\nCheck the browser console (F12) for more details.';
+        
+        showStatus(`❌ Error: ${error.message}`, 'error');
+        alert(errorMessage);
     }
 }
 
