@@ -1926,30 +1926,8 @@ function generateScheduleId() {
 
 // Get current username (from GitHub Pages or prompt)
 async function getCurrentUsername() {
-    try {
-        // Always use 'gvrevillac' unless overridden by URL or prompt
-        const defaultUsername = 'gvrevillac';
-        // Try to get from GitHub Pages URL
-        if (window.location.hostname.includes('github.io')) {
-            const match = window.location.hostname.match(/([^\.]+)\.github\.io/);
-            if (match && match[1]) {
-                return match[1];
-            }
-        }
-        // Try to get from URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlUser = urlParams.get('username') || urlParams.get('user');
-        if (urlUser) return urlUser;
-        // Check local storage
-        const savedUser = localStorage.getItem('schedule_username');
-        if (savedUser) return savedUser;
-        // Default to 'gvrevillac' if nothing else
-        localStorage.setItem('schedule_username', defaultUsername);
-        return defaultUsername;
-    } catch (error) {
-        console.error('Error getting username:', error);
-        return 'anonymous';
-    }
+    // Always use 'gvrevillac' for username
+    return 'gvrevillac';
 }
 
 // Save to Google Sheets
